@@ -1,0 +1,17 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": [
+          "http://localhost:3000",
+          "https://YOUR-REPLIT-DEV-DOMAIN",
+          "https://YOUR-PRODUCTION-DOMAIN"
+        ],
+        "methods": ["GET", "PUT", "HEAD"],
+        "headers": ["Content-Type", "x-amz-meta-owner", "x-amz-meta-upload-id"]
+      },
+      "exposeHeaders": ["ETag"],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

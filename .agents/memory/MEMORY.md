@@ -1,0 +1,13 @@
+- [Saved collection privacy](saved-collection-privacy.md) — membership visibility must track both the current save and current post audience access.
+- [Next.js release isolation](next-release-isolation.md) — release builds must not share Next’s generated directory with a running Preview.
+- [Private R2 uploads in Preview](private-r2-preview-uploads.md) — rotating Preview origins require an authenticated same-origin fallback behind signed direct uploads.
+- [Immutable media promotion](immutable-media-promotion.md) — validate a never-signed promoted key; a validated staging key remains writable until its PUT expires.
+- [Artifact route ownership](artifact-route-ownership.md) — avoid route prefixes owned by sibling artifacts; build share URLs from browser-visible origins.
+- [Supabase extension schemas](supabase-extension-schemas.md) — locked SECURITY DEFINER paths must schema-qualify pgcrypto functions.
+- [Realtime privacy revocation](realtime-privacy-revocation.md) — relationship revocations need server-driven invalidation plus generation-safe feed refresh and polling fallback.
+- [Private media key boundary](private-media-key-boundary.md) — authorize media with browser-safe metadata, then resolve storage keys only through a server credential.
+- [Migration ledger and cleanup lease](migration-ledger-and-cleanup-lease.md) — release gates require ordered DB state; autoscaled cleanup must use a database lease and bounded retries.
+- [Cleanup scheduler compatibility](cleanup-scheduler-compatibility.md) — external schedulers must accept both deployed and current cleanup success shapes while failing closed on errors.
+- [Production privacy test fixtures](production-privacy-test-fixtures.md) — enroll event participants before testing friendship revocation so event privacy checks remain conclusive.
+- [StrictMode async effect guards](strictmode-async-effect-guards.md) — never mark an effect request complete before its async result survives cleanup.
+- [Privacy preference enforcement](privacy-preference-enforcement.md) — apply untouched defaults atomically on the server and enforce person denials at media delivery.

@@ -1,0 +1,11 @@
+{
+  "name": "rglrs-media-cleanup-scheduler",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "media:cleanup": "node scripts/media-cleanup.mjs",
+    "test": "node --test",
+    "check": "node --check lib/cleanup-client.mjs && node --check scripts/media-cleanup.mjs"
+  }
+}

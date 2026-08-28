@@ -1,0 +1,37 @@
+kind = "web"
+previewPath = "/"
+title = "RGLRS"
+description = "A mobile-first private social network for sharing posts, events, messages, and invitations with close friends and trusted circles."
+version = "1.0.0"
+id = "artifacts/rglrs"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23483
+
+[services.development]
+run = "pnpm --filter @workspace/rglrs run dev"
+
+[services.production]
+
+[services.production.build]
+args = ["pnpm", "--filter", "@workspace/rglrs", "run", "build"]
+
+[services.production.build.env]
+NODE_ENV = "production"
+
+[services.production.run]
+args = ["pnpm", "--filter", "@workspace/rglrs", "run", "start"]
+
+[services.production.run.env]
+PORT = "23483"
+NODE_ENV = "production"
+
+[services.production.health.startup]
+path = "/welcome"
+
+[services.env]
+PORT = "23483"
+BASE_PATH = "/"
