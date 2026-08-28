@@ -1,86 +1,32 @@
-# RGLRS v0.2.1
+# RGLRS Media Cleanup Scheduler
 
-**Private social for the people who matter.**
+Standalone Replit Scheduled Deployment source for triggering the production RGLRS private-media cleanup endpoint.
 
-RGLRS is a mobile-first private social network starter built to match the approved graphite + teal UI direction in `docs/mobile-ui-reference.png`.
+## Required environment
 
-## Visual source of truth
+- `NEXT_PUBLIC_APP_URL=https://rglrs.replit.app`
+- `SESSION_SECRET` — use the existing production RGLRS secret through Replit Secrets. Never commit it.
+- Optional: `CLEANUP_MAX_BATCHES` (defaults to `10`).
 
-The 20-screen mobile board in `docs/mobile-ui-reference.png` is the V1 UI target. The codebase now includes matching routes for the primary flows rather than treating the board as a loose inspiration.
-
-## Included screens / routes
-
-1. Splash — `/welcome`
-2. Login — `/login`
-3. Home feed — `/`
-4. Create post — `/create`
-5. Audience picker — `/create/audience`
-6. Events hub — `/events`
-7. Event page — `/events/vegas-2026`
-8. Event gallery — `/events/vegas-2026/gallery`
-9. QR invite — `/events/emma-birthday/invite`
-10. Invite accepted — `/invite/accepted`
-11. Messages — `/messages`
-12. Chat — `/messages/besties`
-13. Profile — `/profile`
-14. Notifications — `/notifications`
-15. Settings — `/settings`
-16. Search — `/search`
-17. New event — `/events/new`
-18. Event members — `/events/vegas-2026/members`
-19. Post detail — `/post/p1`
-20. PWA install guide — `/install`
-
-## Stack
-
-- Next.js 15
-- React 19
-- TypeScript
-- Sora typography
-- Supabase-ready auth/database layer
-- PostgreSQL + RLS migration
-- Cloudflare R2 signed-upload route
-- QR invite generation
-- PWA manifest/service worker
-
-## GitHub-first setup
-
-Use GitHub as the source of truth, then import the repository into Replit.
-
-Read:
-
-- `SETUP_GUIDE.md` — complete account/key/setup walkthrough
-- `REPLIT_MASTER_PROMPT.md` — exact Replit Agent prompt
-- `REPLIT_SETUP.md` — quick Replit checklist
-
-Run:
+## Run
 
 ```bash
-npm install
-npm run typecheck
-npm run build
-npm run dev -- --hostname 0.0.0.0
+pnpm run media:cleanup
 ```
 
-The app uses demo content until production services are connected.
+## Tests
 
-## Design principles locked for V1
+```bash
+pnpm test
+```
 
-- Near-black graphite background
-- Teal only for active states and primary actions
-- Compact, native-feeling mobile spacing
-- Chronological private feed
-- Audience selection is part of composing a post
-- Events are first-class private social spaces
-- No public follower-count culture
-- No permanent public media URLs in production
+## Replit deployment
 
-## Production next steps
+Import this branch as a separate Replit app named `rglrs-media-cleanup-scheduler`, configure it as a **Scheduled Deployment**, use `pnpm run media:cleanup`, and schedule it every 15 minutes.
 
-1. Connect Supabase environment variables.
-2. Apply `db/migrations/001_initial.sql`.
-3. Wire feed/profile/event queries to Supabase.
-4. Configure R2 environment variables for private media uploads.
-5. Replace demo invite acceptance with hashed-token redemption.
-6. Add automated privacy/RLS tests.
-7. Run device QA at 320px, 375px, 390px, 430px and tablet widths.
+This scheduler does not need a public web URL and must not replace the main RGLRS Autoscale deployment.
+
+Expected behavior:
+- HTTP 409 cleanup-in-progress: successful no-op.
+- Network/auth/unexpected HTTP errors: exit code 1.
+- Cleanup-reported deletion failures: exit code 2.
