@@ -1,0 +1,20 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="70" y1="50" x2="430" y2="470" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#181D23"/>
+      <stop offset="1" stop-color="#090B0E"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="132" y1="128" x2="352" y2="386" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5DE6E0"/>
+      <stop offset="1" stop-color="#17BDB7"/>
+    </linearGradient>
+    <filter id="glow" x="72" y="74" width="370" height="360" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+  </defs>
+  <rect x="18" y="18" width="476" height="476" rx="112" fill="url(#bg)"/>
+  <rect x="18.5" y="18.5" width="475" height="475" rx="111.5" stroke="#55606B" stroke-opacity=".55"/>
+  <path opacity=".25" filter="url(#glow)" d="M119 126H315C374 126 406 158 406 209C406 257 376 285 331 290L405 378H323L231 270H304C330 270 345 255 345 230C345 207 331 192 304 192H178L119 126Z" fill="#22D1C5"/>
+  <path d="M119 126H315C374 126 406 158 406 209C406 257 376 285 331 290L405 378H323L231 270H304C330 270 345 255 345 230C345 207 331 192 304 192H178L119 126Z" fill="url(#teal)"/>
+  <path d="M119 126L178 192H304C331 192 345 207 345 230C345 255 330 270 304 270H231L175 207H127L206 295L280 378H365L267 264C349 260 379 224 377 192C374 151 346 126 315 126H119Z" fill="url(#teal)" opacity=".18"/>
+</svg>

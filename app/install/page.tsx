@@ -1,0 +1,3 @@
+import Link from "next/link";
+import { BrandMark } from "@/components/brand";
+export default function Install(){return <div className="auth-shell"><div className="install-card"><div className="install-icon"><BrandMark size={60}/></div><h1 style={{fontSize:19,margin:"0 0 7px"}}>Install RGLRS</h1><p style={{fontSize:9,color:"var(--muted)",lineHeight:1.55}}>Add RGLRS to your Home Screen for the best experience.</p><div className="install-step"><span className="step-number">1</span><div>Tap the share icon at the bottom of Safari.</div></div><div className="install-step"><span className="step-number">2</span><div>Scroll down and tap “Add to Home Screen.”</div></div><Link href="/" className="primary-btn" style={{width:"100%",marginTop:18}}>Got it!</Link></div></div>}

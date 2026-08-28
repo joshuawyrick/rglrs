@@ -1,0 +1,3 @@
+import Link from "next/link";
+import { Check } from "lucide-react";
+export default function InviteAccepted(){return <div className="auth-shell"><div className="invite-success" style={{width:"min(100%,390px)"}}><div className="confetti">• ˚ ✦ ˚ •</div><div className="success-ring"><Check size={40}/></div><h1 style={{fontSize:20,margin:"0 0 6px"}}>You’re in! 🎉</h1><p style={{fontSize:9,color:"var(--muted)",lineHeight:1.55,margin:"0 0 24px"}}>You’ve joined<br/>Emma’s Birthday Dinner.</p><Link href="/events/emma-birthday" className="primary-btn" style={{width:"100%"}}>View Event</Link><Link href="/" className="secondary-btn" style={{width:"100%",marginTop:9}}>Back to Home</Link></div></div>}
