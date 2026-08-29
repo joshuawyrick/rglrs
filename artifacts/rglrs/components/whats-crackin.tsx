@@ -136,16 +136,14 @@ export function WhatsCrackin() {
     } else setEvents([]);
   }, [supabase]);
 
-  const loadNearby = useCallback(async (where?: Coordinates) => {
+  const loadNearby = useCallback(async (where: Coordinates) => {
     if (!supabase) return;
-    const center = where || position;
-    if (!center) return;
     const { data, error } = await supabase.rpc("get_whats_crackin_nearby", {
-      p_lat:center.lat, p_lng:center.lng, p_radius_m:Math.round(radiusMiles * 1609.344),
+      p_lat:where.lat, p_lng:where.lng, p_radius_m:Math.round(radiusMiles * 1609.344),
     });
     if (error) return setMessage(error.message || "Could not load nearby RGLRS.");
     setPoints((data || []) as NearbyPoint[]);
-  }, [position, radiusMiles, supabase]);
+  }, [radiusMiles, supabase]);
 
   const pushPosition = useCallback(async (where: Coordinates) => {
     if (!supabase) return;
@@ -177,7 +175,7 @@ export function WhatsCrackin() {
 
   useEffect(() => {
     if (!position) return;
-    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void loadNearby(); }, 30000);
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void loadNearby(position); }, 30000);
     return () => window.clearInterval(timer);
   }, [loadNearby, position]);
 
@@ -236,7 +234,9 @@ export function WhatsCrackin() {
     const { error } = await supabase.rpc("stop_location_sharing_secure");
     setBusy(false);
     if (error) return setMessage(error.message || "Could not stop sharing.");
-    setShare({active:false,target_ids:[]}); setPoints((current) => current); setMessage("Location sharing stopped. Your pin was removed immediately.");
+    setShare({active:false,target_ids:[]});
+    setSelected(null);
+    setMessage("Location sharing stopped. Your pin was removed immediately.");
   }
 
   async function connect(point: NearbyPoint) {
@@ -248,8 +248,13 @@ export function WhatsCrackin() {
   }
 
   const visiblePoints = tab === "friends" ? points.filter((point) => point.is_friend) : points;
+  const audienceLabel = share.audience === "anonymous" ? "Anonymous nearby"
+    : share.audience === "selected" ? "Selected friends"
+    : share.audience === "event" ? "Event members"
+    : share.audience === "everyone" ? "Everyone on RGLRS"
+    : share.audience === "friends" ? "Friends" : "Sharing";
   const sharingLabel = share.active
-    ? `${share.audience === "anonymous" ? "Anonymous nearby" : share.audience?.replace("selected","Selected friends").replace("event","Event members").replace("everyone","Everyone on RGLRS").replace("friends","Friends") || "Sharing"} · ${share.last_update ? `updated ${timeAgo(share.last_update)}` : "waiting for GPS"}`
+    ? `${audienceLabel} · ${share.last_update ? `updated ${timeAgo(share.last_update)}` : "waiting for GPS"}`
     : "Your location is off";
 
   return <div className={styles.wrap}>
