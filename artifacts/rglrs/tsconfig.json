@@ -34,10 +34,11 @@
     ".next-release-3319/types/**/*.ts",
     ".next-release-39568/types/**/*.ts",
     ".next-release-4453/types/**/*.ts",
+    ".next-release-5351/types/**/*.ts",
     ".next-release-7077/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-release-5351/types/**/*.ts"
+    ".next-release-3765/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

@@ -15,13 +15,15 @@ const connectSources = [
   supabaseOrigin,
   supabaseOrigin?.replace(/^http/, "ws"),
   "https://*.r2.cloudflarestorage.com",
+  "https://maps.googleapis.com",
+  "https://maps.gstatic.com",
 ].filter(Boolean);
 const contentSecurityPolicy = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isProduction ? "" : " 'unsafe-eval'"}`,
+  `script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://maps.gstatic.com${isProduction ? "" : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "img-src 'self' data: blob: https://images.unsplash.com https://plus.unsplash.com https://api.dicebear.com https://*.r2.cloudflarestorage.com",
+  "img-src 'self' data: blob: https://images.unsplash.com https://plus.unsplash.com https://api.dicebear.com https://*.r2.cloudflarestorage.com https://maps.googleapis.com https://maps.gstatic.com https://*.googleapis.com https://*.gstatic.com https://*.google.com",
   "media-src 'self' blob: https://*.r2.cloudflarestorage.com",
   `connect-src ${connectSources.join(" ")}`,
   "worker-src 'self' blob:",
@@ -38,7 +40,7 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()",
+    value: "camera=(), microphone=(), geolocation=(self), payment=(), usb=(), browsing-topics=()",
   },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },

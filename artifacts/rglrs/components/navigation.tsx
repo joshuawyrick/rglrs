@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Bell, CalendarDays, Home, MessageCircle, Plus, Search, Settings, UserRound, UsersRound } from "lucide-react";
+import { Bell, CalendarDays, Home, MapPin, MessageCircle, Plus, Search, Settings, UserRound, UsersRound } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { NavBadge, UnreadProvider, useUnread } from "@/components/unread-provider";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -16,6 +16,7 @@ type ProfileSummary = {
 
 const desktopMain = [
   ["/", "Home", Home],
+  ["/whats-crackin", "What’s Crackin", MapPin],
   ["/events", "Events", CalendarDays],
   ["/messages", "Messages", MessageCircle],
   ["/notifications", "Activity", Bell],
@@ -65,6 +66,7 @@ export function HomeMobileTop({ profile }: { profile: ProfileSummary | null }) {
     <div className="home-mobile-top">
       <Brand compact/>
       <div className="row gap8">
+        <Link className="screen-icon-btn" href="/whats-crackin" aria-label="What’s Crackin"><MapPin size={18}/></Link>
         <Link className="screen-icon-btn badge-anchor" href="/notifications" aria-label="Notifications"><Bell size={18}/><NavBadge count={notifications}/></Link>
         <Link href="/profile" aria-label="Profile">{avatarUrl ? <img className="profile-avatar-small" src={avatarUrl} alt="" style={{width:28,height:28}} /> : <div className="profile-avatar-fallback" style={{width:28,height:28,fontSize:10}}>{avatarText}</div>}</Link>
       </div>
@@ -76,18 +78,25 @@ export function MobileBottom() {
   const path = usePathname();
   const { messages } = useUnread();
   const links = [
-    ["/", Home],
-    ["/search", Search],
-    ["/create", Plus],
-    ["/messages", MessageCircle],
-    ["/profile", UserRound]
+    ["/", "Home", Home],
+    ["/whats-crackin", "What’s Crackin", MapPin],
+    ["/search", "Search", Search],
+    ["/create", "Create", Plus],
+    ["/messages", "Messages", MessageCircle],
+    ["/profile", "Profile", UserRound]
   ] as const;
   return (
     <div className="mobile-bottom">
-      <div className="mobile-bottom-inner">
-        {links.map(([href,Icon],i) => (
-          <Link key={href} href={href} aria-label={href} className={i===2?"mobile-create":`mobile-nav-link ${isActive(path,href)?"active":""}`}>
-            <Icon size={i===2?18:19}/>{href === "/messages" ? <NavBadge count={messages}/> : null}
+      <div className="mobile-bottom-inner" style={{gridTemplateColumns:"repeat(6,1fr)"}}>
+        {links.map(([href,label,Icon]) => (
+          <Link
+            key={href}
+            href={href}
+            aria-label={label}
+            className={href==="/create"?"mobile-create":`mobile-nav-link ${isActive(path,href)?"active":""}`}
+            style={href==="/create"?{width:44,height:44}:{minHeight:44}}
+          >
+            <Icon size={href==="/create"?18:19}/>{href === "/messages" ? <NavBadge count={messages}/> : null}
           </Link>
         ))}
       </div>

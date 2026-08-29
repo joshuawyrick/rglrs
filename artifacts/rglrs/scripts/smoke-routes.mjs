@@ -39,6 +39,7 @@ const protectedRoutes = [
   "/events/vegas-2026/members",
   "/post/p1",
   "/install",
+  "/whats-crackin",
 ];
 const protectedApiRoutes = [
   "/account-data/export",
@@ -49,7 +50,7 @@ const failures = [];
 const requiredSecurityHeaders = {
   "content-security-policy": ["default-src 'self'", "frame-ancestors 'none'", "object-src 'none'"],
   "referrer-policy": ["strict-origin-when-cross-origin"],
-  "permissions-policy": ["camera=()", "microphone=()", "geolocation=()"],
+  "permissions-policy": ["camera=()", "microphone=()", "geolocation=(self)"],
   "x-content-type-options": ["nosniff"],
   "x-frame-options": ["DENY"],
 };

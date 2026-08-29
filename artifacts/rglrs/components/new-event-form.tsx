@@ -6,8 +6,18 @@ import { useRouter } from "next/navigation";
 import type { EventSummary } from "@/lib/event-data";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { PlacePicker, type PlaceValue } from "@/components/place-picker";
+import { DateRangeCalendar } from "@/components/date-range-calendar";
 
 type DraftDates = { startDate: string; startTime: string; endDate: string; endTime: string };
+
+function normalizedDateRange(draft: DraftDates, allDay: boolean): DraftDates {
+  if (draft.endDate && (allDay || draft.endDate !== draft.startDate || draft.endTime)) return draft;
+  if (allDay) return { ...draft, endDate: draft.startDate };
+  const start = new Date(`${draft.startDate}T${draft.startTime || "00:00"}:00`);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const local = new Date(end.getTime() - end.getTimezoneOffset() * 60_000).toISOString();
+  return { ...draft, endDate: local.slice(0,10), endTime: draft.endTime || local.slice(11,16) };
+}
 
 function localParts(value: string | null, timezone?: string | null): { date: string; time: string } {
   if (!value) return { date: "", time: "" };
@@ -93,6 +103,7 @@ export function EventForm({ event }: { event?: EventSummary }) {
   const [dates, setDates] = useState<DraftDates>({ startDate:start.date, startTime:start.time, endDate:end.date, endTime:end.time });
   const [dateDraft, setDateDraft] = useState(dates);
   const [allDay, setAllDay] = useState(event?.allDay || false);
+  const [allDayDraft, setAllDayDraft] = useState(allDay);
   const [dateOpen, setDateOpen] = useState(false);
   const [coverUploadId, setCoverUploadId] = useState<string | null>(event?.coverUploadId || null);
   const [coverPreview, setCoverPreview] = useState<string | null>(event?.coverUrl || null);
@@ -151,7 +162,9 @@ export function EventForm({ event }: { event?: EventSummary }) {
     const endDate = dateValue(dates.endDate, dates.endTime, allDay, timezone);
     if (dates.startDate && !startDate || dates.endDate && !endDate) return setError("Enter valid event dates.");
     if (endDate && !startDate) return setError("Choose a start date before an end date.");
-    if (startDate && endDate && endDate < startDate) return setError("End date must be after the start date.");
+    if (startDate && endDate && (allDay ? endDate < startDate : endDate <= startDate)) {
+      return setError("End date must be after the start date.");
+    }
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return setError("Events are unavailable.");
     setBusy(true); setError(null);
@@ -206,8 +219,8 @@ export function EventForm({ event }: { event?: EventSummary }) {
       </label>
 
       <div>
-        <span className="form-label">Date and time <em>optional</em></span>
-        <button type="button" className="event-date-trigger" onClick={() => { setDateDraft(dates); setDateOpen(true); }} aria-haspopup="dialog">
+        <span className="form-label">Dates <em>optional</em></span>
+        <button type="button" className="event-date-trigger" onClick={() => { setDateDraft(dates); setAllDayDraft(allDay); setDateOpen(true); }} aria-haspopup="dialog">
           <CalendarDays size={20}/>
           <span>{dateSummary(dates, allDay)}</span>
         </button>
@@ -242,43 +255,50 @@ export function EventForm({ event }: { event?: EventSummary }) {
           <section ref={sheetRef} tabIndex={-1} className="event-date-sheet" role="dialog" aria-modal="true" aria-labelledby="event-date-title">
             <div className="event-sheet-handle"/>
             <div className="row space">
-              <h2 id="event-date-title" style={{ margin: 0, fontSize: 16 }}>Event date</h2>
+              <h2 id="event-date-title" style={{ margin: 0, fontSize: 16 }}>Event dates</h2>
               <button type="button" className="icon-button" onClick={() => setDateOpen(false)} aria-label="Close date picker"><X size={20}/></button>
             </div>
 
+            <DateRangeCalendar
+              startDate={dateDraft.startDate}
+              endDate={dateDraft.endDate}
+              onChange={(startDate, endDate) => setDateDraft((current) => ({ ...current, startDate, endDate }))}
+            />
+
             <label className="composer-option" style={{ minHeight: 64 }}>
               <span style={{ fontSize: 13, fontWeight: 700 }}>All-day event</span>
-              <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)}/>
+              <input type="checkbox" checked={allDayDraft} onChange={(e) => setAllDayDraft(e.target.checked)}/>
             </label>
 
-            <div className="event-date-grid">
-              <label>
-                <span className="form-label">Starts</span>
-                <input className="input" type="date" value={dateDraft.startDate} onChange={(e) => setDateDraft({...dateDraft,startDate:e.target.value})}/>
-              </label>
-              {!allDay ? (
+            {!allDayDraft && dateDraft.startDate ? (
+              <div className="form-two">
                 <label>
-                  <span className="form-label">Time</span>
+                  <span className="form-label">Start time</span>
                   <input className="input" type="time" value={dateDraft.startTime} onChange={(e) => setDateDraft({...dateDraft,startTime:e.target.value})}/>
                 </label>
-              ) : null}
-              <label>
-                <span className="form-label">Ends</span>
-                <input className="input" type="date" min={dateDraft.startDate} value={dateDraft.endDate} onChange={(e) => setDateDraft({...dateDraft,endDate:e.target.value})}/>
-              </label>
-              {!allDay ? (
                 <label>
-                  <span className="form-label">Time</span>
+                  <span className="form-label">End time</span>
                   <input className="input" type="time" value={dateDraft.endTime} onChange={(e) => setDateDraft({...dateDraft,endTime:e.target.value})}/>
                 </label>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
 
             <p className="event-timezone">Times use {timezone.replaceAll("_", " ")}.</p>
 
             <div className="form-two">
-              <button type="button" className="secondary-btn" onClick={() => { setDates({startDate:"",startTime:"",endDate:"",endTime:""}); setDateOpen(false); }}>Clear</button>
-              <button type="button" className="primary-btn" onClick={() => { setDates(dateDraft); setDateOpen(false); }}>Apply</button>
+              <button type="button" className="secondary-btn" onClick={() => {
+                const cleared = {startDate:"",startTime:"",endDate:"",endTime:""};
+                setDates(cleared);
+                setDateDraft(cleared);
+                setAllDay(false);
+                setAllDayDraft(false);
+                setDateOpen(false);
+              }}>Clear</button>
+              <button type="button" className="primary-btn" disabled={!dateDraft.startDate} onClick={() => {
+                setDates(normalizedDateRange(dateDraft, allDayDraft));
+                setAllDay(allDayDraft);
+                setDateOpen(false);
+              }}>Apply</button>
             </div>
           </section>
         </div>

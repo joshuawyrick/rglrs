@@ -19,7 +19,7 @@ type Settings = {
 type DefaultRule = { scope: "post" | "event_media"; rule_type: string; subject_id: string | null };
 type OverrideField = "can_view_profile" | "can_view_profile_photo" | "can_view_connections" |
   "can_find_username" | "can_find_email" | "can_send_friend_request" | "can_message" |
-  "can_invite_to_events" | "can_download_media" | "can_reshare_internal" | "hide_posts" | "hide_event_media";
+  "can_invite_to_events" | "can_download_media" | "can_reshare_internal" | "hide_posts" | "hide_event_media" | "can_view_location";
 type PersonOverride = { person_id: string } & Record<OverrideField, boolean | null>;
 type Candidate = { id: string; name: string };
 
@@ -35,6 +35,7 @@ const overrideFields: Array<[OverrideField, string]> = [
   ["can_find_username","Find username"],["can_find_email","Find email"],["can_send_friend_request","Send friend request"],
   ["can_message","Message"],["can_invite_to_events","Invite to events"],["can_download_media","Download media"],
   ["can_reshare_internal","Reshare internally"],["hide_posts","Hide posts"],["hide_event_media","Hide event media"],
+  ["can_view_location","See my What’s Crackin location"],
 ];
 const emptyOverride = (personId: string): PersonOverride => Object.fromEntries([
   ["person_id", personId], ...overrideFields.map(([field]) => [field, null]),
@@ -153,6 +154,7 @@ export default function PrivacySettingsPage() {
         <Toggle label="Allow internal resharing" hint="Audiences and blocks still apply." checked={settings.allow_internal_resharing} onChange={(v) => update("allow_internal_resharing",v)}/>
       </section>
       <section className="privacy-section"><div className="settings-title">Person overrides</div>
+        <p style={{fontSize:10,color:"var(--muted)",lineHeight:1.5}}>These controls can make your privacy stricter for a specific friend, including denying access to your What’s Crackin location even while you are sharing.</p>
         <div className="row gap8">
           <select className="input" value={newPerson} onChange={(e) => setNewPerson(e.target.value)}>
             <option value="">Choose a friend…</option>
@@ -163,7 +165,7 @@ export default function PrivacySettingsPage() {
           </button>
         </div>
         {overrides.map((item) => <div className="privacy-person-card" key={item.person_id}><div className="row space"><strong>{names.get(item.person_id) || "Person"}</strong><button type="button" className="screen-icon-btn" disabled={busyPerson===item.person_id} onClick={() => void removeOverride(item.person_id)} aria-label="Remove person override"><Trash2 size={20}/></button></div>
-          <div className="privacy-person-grid">{overrideFields.map(([field,label]) => <Select key={field} label={label} value={item[field]===null ? "inherit" : String(item[field])} options={field.startsWith("hide_") ? [["inherit","Default"],["true","Hide"],["false","Show"]] : [["inherit","Default"],["true","Allow"],["false","Deny"]]} onChange={(value) => void persistOverride({...item,[field]:value==="inherit" ? null : value==="true"})}/>)}</div>
+          <div className="privacy-person-grid">{overrideFields.map(([field,label]) => <Select key={field} label={label} value={item[field]===null || item[field]===undefined ? "inherit" : String(item[field])} options={field.startsWith("hide_") ? [["inherit","Default"],["true","Hide"],["false","Show"]] : [["inherit","Default"],["true","Allow"],["false","Deny"]]} onChange={(value) => void persistOverride({...item,[field]:value==="inherit" ? null : value==="true"})}/>)}</div>
         </div>)}
       </section>
       {message ? <p className={`form-message ${message.endsWith("saved.") ? "success-message" : "error-message"}`} role="status">{message}</p> : null}
