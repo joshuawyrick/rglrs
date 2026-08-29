@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { EventSummary } from "@/lib/event-data";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { PlacePicker, type PlaceValue } from "@/components/place-picker";
+import { DateRangeCalendar } from "@/components/date-range-calendar";
 
 type DraftDates = { startDate: string; startTime: string; endDate: string; endTime: string };
 
@@ -206,7 +207,7 @@ export function EventForm({ event }: { event?: EventSummary }) {
       </label>
 
       <div>
-        <span className="form-label">Date and time <em>optional</em></span>
+        <span className="form-label">Dates <em>optional</em></span>
         <button type="button" className="event-date-trigger" onClick={() => { setDateDraft(dates); setDateOpen(true); }} aria-haspopup="dialog">
           <CalendarDays size={20}/>
           <span>{dateSummary(dates, allDay)}</span>
@@ -242,43 +243,43 @@ export function EventForm({ event }: { event?: EventSummary }) {
           <section ref={sheetRef} tabIndex={-1} className="event-date-sheet" role="dialog" aria-modal="true" aria-labelledby="event-date-title">
             <div className="event-sheet-handle"/>
             <div className="row space">
-              <h2 id="event-date-title" style={{ margin: 0, fontSize: 16 }}>Event date</h2>
+              <h2 id="event-date-title" style={{ margin: 0, fontSize: 16 }}>Event dates</h2>
               <button type="button" className="icon-button" onClick={() => setDateOpen(false)} aria-label="Close date picker"><X size={20}/></button>
             </div>
+
+            <DateRangeCalendar
+              startDate={dateDraft.startDate}
+              endDate={dateDraft.endDate}
+              onChange={(startDate, endDate) => setDateDraft((current) => ({ ...current, startDate, endDate }))}
+            />
 
             <label className="composer-option" style={{ minHeight: 64 }}>
               <span style={{ fontSize: 13, fontWeight: 700 }}>All-day event</span>
               <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)}/>
             </label>
 
-            <div className="event-date-grid">
-              <label>
-                <span className="form-label">Starts</span>
-                <input className="input" type="date" value={dateDraft.startDate} onChange={(e) => setDateDraft({...dateDraft,startDate:e.target.value})}/>
-              </label>
-              {!allDay ? (
+            {!allDay && dateDraft.startDate ? (
+              <div className="form-two">
                 <label>
-                  <span className="form-label">Time</span>
+                  <span className="form-label">Start time</span>
                   <input className="input" type="time" value={dateDraft.startTime} onChange={(e) => setDateDraft({...dateDraft,startTime:e.target.value})}/>
                 </label>
-              ) : null}
-              <label>
-                <span className="form-label">Ends</span>
-                <input className="input" type="date" min={dateDraft.startDate} value={dateDraft.endDate} onChange={(e) => setDateDraft({...dateDraft,endDate:e.target.value})}/>
-              </label>
-              {!allDay ? (
                 <label>
-                  <span className="form-label">Time</span>
+                  <span className="form-label">End time</span>
                   <input className="input" type="time" value={dateDraft.endTime} onChange={(e) => setDateDraft({...dateDraft,endTime:e.target.value})}/>
                 </label>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
 
             <p className="event-timezone">Times use {timezone.replaceAll("_", " ")}.</p>
 
             <div className="form-two">
               <button type="button" className="secondary-btn" onClick={() => { setDates({startDate:"",startTime:"",endDate:"",endTime:""}); setDateOpen(false); }}>Clear</button>
-              <button type="button" className="primary-btn" onClick={() => { setDates(dateDraft); setDateOpen(false); }}>Apply</button>
+              <button type="button" className="primary-btn" disabled={!dateDraft.startDate} onClick={() => {
+                const normalized = dateDraft.endDate ? dateDraft : { ...dateDraft, endDate: dateDraft.startDate };
+                setDates(normalized);
+                setDateOpen(false);
+              }}>Apply</button>
             </div>
           </section>
         </div>
