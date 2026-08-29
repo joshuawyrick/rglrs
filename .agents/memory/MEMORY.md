@@ -13,3 +13,4 @@
 - [Privacy preference enforcement](privacy-preference-enforcement.md) — apply untouched defaults atomically on the server and enforce person denials at media delivery.
 - [Approximate location privacy](approximate-location-privacy.md) — shift with non-public entropy and apply discovery bounds to the shifted point, never the raw point.
 - [NixOS browser smoke runtime](nixos-browser-smoke-runtime.md) — prefer Replit’s managed Chromium path; downloaded Playwright browsers may lack runtime libraries.
+- [Google Maps referrer smoke](google-maps-referrer-smoke.md) — test restricted browser keys under the current real document origin; preview-origin rotation invalidates old allowlists.

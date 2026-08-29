@@ -7,14 +7,23 @@ const { chromium } = require("playwright");
 const baseUrl = process.env.SMOKE_BASE_URL;
 const browserKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
 const placesKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
-const smokeReferrer = process.env.RELEASE_SMOKE_REFERRER || process.env.NEXT_PUBLIC_APP_URL || baseUrl;
+const documentedDevelopmentReferrer =
+  "https://59204ef6-03f6-42fe-8123-2c15b21d523d-00-1efpiyhwk7lgs-rbodksnm.picard.replit.dev/";
+const approvedDevelopmentReferrer = process.env.REPLIT_DEV_DOMAIN
+  ? `https://${process.env.REPLIT_DEV_DOMAIN.trim()}/`
+  : documentedDevelopmentReferrer;
 const stubMaps = process.env.RELEASE_MAP_SMOKE_STUB === "1";
 
 if (!baseUrl) throw new Error("Set SMOKE_BASE_URL before running the What's Crackin browser smoke test.");
 if (!browserKey) throw new Error(`${stubMaps ? "A deterministic test Maps key" : "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY"} is required for the What's Crackin browser smoke test.`);
-if (!stubMaps && !smokeReferrer) throw new Error("Set RELEASE_SMOKE_REFERRER or NEXT_PUBLIC_APP_URL for the live Maps referrer smoke check.");
+const baseOrigin = new URL(baseUrl).origin;
+const isLocalSmokeTarget = ["localhost", "127.0.0.1", "::1"].includes(new URL(baseUrl).hostname);
+const smokeReferrer =
+  process.env.RELEASE_SMOKE_REFERRER?.trim() ||
+  (isLocalSmokeTarget ? approvedDevelopmentReferrer : baseOrigin);
 
-const expectedReferrer = smokeReferrer ? `${new URL(smokeReferrer).origin}/` : null;
+const expectedReferrer = `${new URL(smokeReferrer).origin}/`;
+const browserBaseUrl = isLocalSmokeTarget ? expectedReferrer : baseUrl;
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const configuredEmail = process.env.RELEASE_SMOKE_EMAIL?.trim();
@@ -23,6 +32,10 @@ const failures = [];
 
 function recordFailure(message) {
   failures.push(message);
+}
+
+if (placesKey && browserKey === placesKey) {
+  throw new Error("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY and GOOGLE_PLACES_API_KEY must be distinct.");
 }
 
 async function createSmokeUser() {
@@ -106,6 +119,35 @@ try {
       },
     });
   });
+  if (isLocalSmokeTarget) {
+    await context.route(`${new URL(browserBaseUrl).origin}/**`, async (route) => {
+      const request = route.request();
+      const requestUrl = new URL(request.url());
+      const localUrl = new URL(`${requestUrl.pathname}${requestUrl.search}`, baseUrl);
+      const forwardedHeaders = await request.allHeaders();
+      const response = await fetch(localUrl, {
+        method: request.method(),
+        headers: forwardedHeaders,
+        body: ["GET", "HEAD"].includes(request.method()) ? undefined : request.postDataBuffer(),
+        redirect: "manual",
+      });
+      const headers = Object.fromEntries(response.headers);
+      if (headers.location) {
+        const redirectUrl = new URL(headers.location, baseUrl);
+        if (redirectUrl.origin === baseOrigin) {
+          headers.location = new URL(
+            `${redirectUrl.pathname}${redirectUrl.search}${redirectUrl.hash}`,
+            browserBaseUrl,
+          ).toString();
+        }
+      }
+      await route.fulfill({
+        status: response.status,
+        headers,
+        body: Buffer.from(await response.arrayBuffer()),
+      });
+    });
+  }
   const page = await context.newPage();
   const mapRequests = [];
   const mapReferrers = [];
@@ -207,12 +249,40 @@ try {
     await route.continue({ headers });
   });
 
-  await page.goto(new URL("/whats-crackin", baseUrl).toString(), { waitUntil: "domcontentloaded" });
-  if (new URL(page.url()).pathname === "/login") {
-    await page.locator("#login-email").fill(account.email);
-    await page.locator("#login-password").fill(account.password);
-    await page.getByRole("button", { name: "Sign In" }).click();
-    await page.waitForURL((url) => url.pathname === "/whats-crackin", { timeout: 30_000 });
+  const postLoginPath = isLocalSmokeTarget ? "/install" : "/whats-crackin";
+  const loginBaseUrl = isLocalSmokeTarget ? baseUrl : browserBaseUrl;
+  await page.goto(
+    new URL(`/login?next=${encodeURIComponent(postLoginPath)}`, loginBaseUrl).toString(),
+    {
+    waitUntil: "domcontentloaded",
+    },
+  );
+  await page.locator("#login-email").fill(account.email);
+  await page.locator("#login-password").fill(account.password);
+  await page.getByRole("button", { name: "Sign In" }).click();
+  try {
+    await page.waitForURL((url) => url.pathname === postLoginPath, { timeout: 30_000 });
+  } catch (error) {
+    throw new Error(`Authenticated smoke navigation stopped at ${new URL(page.url()).pathname}.`, {
+      cause: error,
+    });
+  }
+  if (isLocalSmokeTarget) {
+    const localCookies = await context.cookies(baseUrl);
+    await context.addCookies(
+      localCookies.map(({ name, value, expires, httpOnly, sameSite }) => ({
+        name,
+        value,
+        url: browserBaseUrl,
+        expires,
+        httpOnly,
+        secure: true,
+        sameSite,
+      })),
+    );
+    await page.goto(new URL("/whats-crackin", browserBaseUrl).toString(), {
+      waitUntil: "domcontentloaded",
+    });
   }
 
   await page.getByRole("heading", { name: "What’s Crackin" }).waitFor();
@@ -223,6 +293,25 @@ try {
   }
   await page.locator('[data-map-status="ready"]').waitFor({ timeout: 30_000 });
   if (mapAttempts < 2) recordFailure(`Expected the Maps script to retry after the forced failure, observed ${mapAttempts} attempt.`);
+  if ((await page.viewportSize())?.width !== 390) recordFailure("Authenticated Maps smoke did not run at the required 390px mobile width.");
+
+  if (!stubMaps) {
+    const mapViewport = page.locator('[data-map-status="ready"] .gm-style').first();
+    await mapViewport.waitFor({ state: "visible" });
+    const mapBox = await mapViewport.boundingBox();
+    if (!mapBox || mapBox.width > 390) recordFailure("Google Maps did not fit the 390px mobile viewport.");
+
+    const zoomIn = page.locator('button[aria-label="Zoom in"]').first();
+    await zoomIn.waitFor({ state: "visible" });
+    await zoomIn.click();
+    if (mapBox) {
+      await page.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(mapBox.x + mapBox.width / 2 + 48, mapBox.y + mapBox.height / 2 + 24, { steps: 6 });
+      await page.mouse.up();
+    }
+    await page.locator('[data-map-status="ready"]').waitFor();
+  }
 
   if (!mapRequests[1] || (!stubMaps && mapReferrers[1] !== expectedReferrer)) {
     recordFailure(`Maps request did not use the approved referrer origin (${expectedReferrer}).`);
@@ -297,4 +386,4 @@ if (failures.length) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log(`What's Crackin browser smoke checks passed (${stubMaps ? "deterministic Maps stub" : "live Maps"}, retry, simulated failure fallback, geolocation start/stop, Near You isolation, and server-key exposure assertions).`);
+console.log(`What's Crackin browser smoke checks passed (${stubMaps ? "deterministic Maps stub" : "live Maps at 390px with zoom/pan"}, retry, simulated failure fallback, geolocation start/stop, Near You isolation, referrer, and server-key exposure assertions).`);

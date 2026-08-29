@@ -37,11 +37,14 @@ This is intentionally a browser-visible Google key. In Google Cloud, restrict it
 
 - Maps JavaScript API only.
 - HTTP referrers exactly to the approved origins below (Google Cloud referrer patterns include `/*`):
-  - Development: `https://59204ef6-03f6-42fe-8123-2c15b21d523d-00-1efpiyhwk7lgs-jij312pw.picard.replit.dev/*`
+  - Development: `https://59204ef6-03f6-42fe-8123-2c15b21d523d-00-1efpiyhwk7lgs-rbodksnm.picard.replit.dev/*`
   - Production: `https://therglrs.com/*`
 - Do not add the server/API key, wildcard hosts, or unapproved aliases such as `https://rglrs.replit.app/*`.
 
 Keep the existing `GOOGLE_PLACES_API_KEY` server-only for Places autocomplete.
+The authenticated release smoke test serves its isolated local release build
+under the approved development origin so Google validates the real browser
+origin. Published checks use the `SMOKE_BASE_URL` origin.
 
 The loader removes a failed script before clearing its shared promise, so a transient
 network or Google Maps initialization failure can be retried by returning to the Map tab.

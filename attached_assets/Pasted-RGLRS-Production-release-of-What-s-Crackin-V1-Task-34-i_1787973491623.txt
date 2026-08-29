@@ -1,0 +1,342 @@
+RGLRS — Production release of What’s Crackin V1
+
+Task #34 is APPROVED and all final validation is green.
+
+Final validated source:
+
+feature/whats-crackin-v1
+
+Exact validated SHA:
+
+c075614aec1f647c998112c73c3e979b74131b1f
+
+Production source baseline:
+
+rglrs-current-production
+
+Draft PR:
+
+#1 — What’s Crackin V1 + mobile event date range
+
+You are now authorized to perform the production release, subject to the sequencing and verification below.
+
+1. PRE-RELEASE VERIFICATION
+
+Before changing production:
+
+Confirm the workspace is exactly at:
+
+c075614aec1f647c998112c73c3e979b74131b1f
+
+Do not deploy from main.
+
+Verify:
+
+feature branch SHA matches exactly
+working tree has no uncommitted production changes
+production Supabase migration ledger is currently contiguous through migration 034
+migrations 035–038 in the workspace exactly match the versions that passed development validation
+production Autoscale deployment remains the existing RGLRS main deployment
+media-cleanup Scheduled Deployment remains unchanged
+scheduler remains */15 * * * *
+
+If the production migration ledger is not exactly where expected, STOP before applying anything and report the discrepancy.
+
+2. PRODUCTION CONFIGURATION
+
+Confirm production has the correct:
+
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+
+Do not expose or print the key.
+
+Verify using only a masked prefix/suffix if necessary.
+
+The key should remain restricted in Google Cloud.
+
+Do not broaden its referrer permissions.
+
+Keep GOOGLE_PLACES_API_KEY server-only.
+
+Also verify the production public-origin configuration.
+
+Do NOT change NEXT_PUBLIC_APP_URL to https://therglrs.com unless the custom domain is actually live, serving the application correctly, and the required Supabase authentication redirect allowlist is already configured.
+
+If the custom domain is not fully live yet, preserve the currently working production origin for this release.
+
+3. APPLY PRODUCTION MIGRATIONS
+
+Apply the tested forward-only migrations to the PRODUCTION Supabase database strictly in this order:
+
+035_whats_crackin_location.sql
+036_location_privacy_override_compat.sql
+037_whats_crackin_retention_hardening.sql
+038_location_discovery_safety.sql
+
+Apply one migration at a time.
+
+After EACH migration:
+
+verify successful completion
+verify migration ledger entry
+verify no unexpected schema error
+
+Do not alter migrations 001–034.
+
+If any migration fails:
+
+stop
+do not continue to the next migration
+diagnose the exact condition
+do not improvise destructive production SQL
+4. VERIFY DATABASE BEFORE APP DEPLOYMENT
+
+After migration 038, verify:
+
+ledger contiguous through 038
+location private schema exists
+ordinary authenticated clients cannot directly read exact-coordinate storage
+internal authorization predicates remain non-executable by ordinary authenticated clients
+public/anonymous eligibility defaults deny unknown-age accounts
+blocks and person-specific location denials still override sharing
+event-derived visibility requires current event membership
+stale-location pruning function exists and executes successfully
+
+Only proceed if these pass.
+
+5. PUBLISH THE VALIDATED APPLICATION
+
+Publish exactly the validated application source corresponding to:
+
+c075614aec1f647c998112c73c3e979b74131b1f
+
+Keep the main RGLRS deployment on Autoscale.
+
+Do not convert it to Scheduled/Reserved/Static.
+
+Do not modify the separate cleanup scheduler deployment.
+
+6. IMMEDIATE PRODUCTION HEALTH CHECK
+
+After publishing, verify:
+
+production origin returns successfully
+login works
+home feed loads
+Settings → Privacy loads
+Events load
+event create/edit loads
+Messages load
+/whats-crackin loads
+no CSP errors
+no Permissions-Policy geolocation errors
+no Google Maps authorization/referrer errors
+7. PRODUCTION WHAT’S CRACKIN TEST
+
+Use disposable production test accounts and clean them up afterward.
+
+Verify:
+
+Foreground sharing
+
+start sharing
+map displays correctly
+live status appears
+location updates while page is active
+
+Stop Sharing
+
+stop sharing
+pin becomes unavailable immediately
+exact current position row is removed
+geolocation watch is cleared
+
+Friends
+
+A shares with Friends:
+
+accepted friend B sees A
+stranger C does not
+
+Selected Friends
+
+selected B sees A
+unselected accepted friend does not
+
+Block
+
+block in either direction removes access
+
+Person-specific denial
+
+location privacy denial overrides otherwise eligible sharing
+
+Event
+
+event member sees event-shared location
+non-member cannot
+removing member immediately revokes visibility
+
+Approximate
+
+viewer receives the stable protected display point
+true coordinate is not returned
+
+Last check-in
+
+stale foreground position becomes clearly labeled Last check-in
+it expires according to the configured TTL
+
+Everyone / Anonymous
+
+Unknown-age/default accounts:
+
+server denies these modes
+UI does not offer them
+
+Do not alter eligibility records merely to force these modes during beta testing unless there is an existing authorized test mechanism specifically designed for that.
+
+8. GOOGLE MAPS PRODUCTION CHECK
+
+On the real production HTTPS origin verify:
+
+actual Google Maps provider loads
+actual restricted browser key is used
+no stub/test Maps implementation
+tiles render
+zoom works
+pan works
+map pins render
+390px mobile display works
+
+Do not weaken Google key restrictions to resolve a production issue.
+
+9. EVENT DATE PICKER PRODUCTION CHECK
+
+Verify:
+
+one-calendar range picker
+first tap selects start
+second tap selects end
+range highlight
+same-day timed event
+same-day all-day event
+multi-day event
+cross-month event
+edit existing event
+clear date
+all-day state clears correctly
+
+Clean up test events afterward.
+
+10. CLEANUP / MAINTENANCE
+
+Run or verify the existing maintenance path.
+
+Confirm:
+
+location pruning succeeds
+media cleanup still succeeds
+media cleanup failure and location pruning are appropriately isolated
+30-day published-media recovery behavior remains unchanged
+scheduler deployment remains unchanged
+11. FINAL RELEASE GATE
+
+Run the full production-facing release/security smoke process appropriate for the deployed origin.
+
+Do not require the local test Maps stub to prove the production Google integration; production must use the real provider.
+
+Verify no regression in:
+
+authentication
+privacy
+friendships
+feed
+posts
+private media
+downloads
+events
+event-media exclusions
+messaging
+invites
+signup QR
+event QR
+event covers
+cleanup
+What’s Crackin
+12. GITHUB AFTER SUCCESSFUL PRODUCTION VALIDATION
+
+Only after production validation passes:
+
+Update Draft PR #1 description to remove the obsolete InvalidKeyMapError status and state that the real managed/production HTTPS Maps provider integration passes.
+Preserve the release evidence in the PR description.
+Mark PR #1 ready for review if appropriate.
+Do not merge it automatically if doing so could alter the production source/deployment relationship unexpectedly.
+
+Instead first report the production success and recommended Git branch synchronization step.
+
+FINAL REPORT
+
+Return:
+
+Production migrations
+
+035: PASS/FAIL
+036: PASS/FAIL
+037: PASS/FAIL
+038: PASS/FAIL
+production ledger through 038: PASS/FAIL
+
+Deployment
+
+deployed SHA:
+Autoscale unchanged: YES/NO
+scheduler unchanged: YES/NO
+
+What’s Crackin
+
+route loads: PASS/FAIL
+real Google Map: PASS/FAIL
+zoom/pan: PASS/FAIL
+foreground geolocation: PASS/FAIL
+Stop Sharing: PASS/FAIL
+Friends privacy: PASS/FAIL
+Selected Friends: PASS/FAIL
+block deny: PASS/FAIL
+person location deny: PASS/FAIL
+event sharing/revocation: PASS/FAIL
+approximate protection: PASS/FAIL
+Last Check-in: PASS/FAIL
+unknown-age discovery restriction: PASS/FAIL
+
+Events
+
+single range calendar: PASS/FAIL
+same-day timed: PASS/FAIL
+same-day all-day: PASS/FAIL
+multi-day/cross-month: PASS/FAIL
+
+Regression
+
+privacy suite: PASS/FAIL
+release gate: PASS/FAIL
+media cleanup: PASS/FAIL
+location cleanup: PASS/FAIL
+
+Cleanup
+
+disposable accounts removed: YES/NO
+temporary events/media/location rows removed: YES/NO
+
+GitHub
+
+PR #1 updated: YES/NO
+final PR SHA:
+
+Final
+
+production healthy: YES/NO
+external beta ready with What’s Crackin: YES/NO
+blockers: NONE or exact blocker
+
+Do not claim success until the actual production origin has passed the real-provider map test.
