@@ -29,6 +29,7 @@ const testFiles = [
   "privacy_preferences.sql",
   "event_cover_lifecycle.sql",
   "signup_invite_boundaries.sql",
+  "whats_crackin_privacy.sql",
 ];
 
 for (const fileName of testFiles) {
