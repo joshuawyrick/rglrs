@@ -87,9 +87,15 @@ export function MobileBottom() {
   ] as const;
   return (
     <div className="mobile-bottom">
-      <div className="mobile-bottom-inner">
+      <div className="mobile-bottom-inner" style={{gridTemplateColumns:"repeat(6,1fr)"}}>
         {links.map(([href,Icon]) => (
-          <Link key={href} href={href} aria-label={href} className={href==="/create"?"mobile-create":`mobile-nav-link ${isActive(path,href)?"active":""}`}>
+          <Link
+            key={href}
+            href={href}
+            aria-label={href}
+            className={href==="/create"?"mobile-create":`mobile-nav-link ${isActive(path,href)?"active":""}`}
+            style={href==="/create"?{width:44,height:44}:{minHeight:44}}
+          >
             <Icon size={href==="/create"?18:19}/>{href === "/messages" ? <NavBadge count={messages}/> : null}
           </Link>
         ))}
