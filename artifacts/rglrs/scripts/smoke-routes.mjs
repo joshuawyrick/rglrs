@@ -39,6 +39,7 @@ const protectedRoutes = [
   "/events/vegas-2026/members",
   "/post/p1",
   "/install",
+  "/whats-crackin",
 ];
 const protectedApiRoutes = [
   "/account-data/export",

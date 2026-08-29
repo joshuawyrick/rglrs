@@ -92,6 +92,15 @@ try {
     ["run", "smoke"],
     { ...releaseEnvironment, SMOKE_BASE_URL: releaseBaseUrl },
   );
+  await run(
+    process.execPath,
+    ["scripts/smoke-whats-crackin.mjs"],
+    {
+      ...releaseEnvironment,
+      SMOKE_BASE_URL: releaseBaseUrl,
+      RELEASE_MAP_SMOKE_STUB: "1",
+    },
+  );
   console.log("RGLRS release checks passed.");
 } finally {
   if (server) await stopServer(server);

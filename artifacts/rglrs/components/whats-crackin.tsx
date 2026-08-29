@@ -111,6 +111,7 @@ export function WhatsCrackin() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [mapError, setMapError] = useState("");
+  const [mapReady, setMapReady] = useState(false);
   const [connected, setConnected] = useState<Set<string>>(new Set());
   const mapNode = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -224,6 +225,7 @@ export function WhatsCrackin() {
   useEffect(() => {
     if (tab !== "map" || !mapNode.current || !position) return;
     let cancelled = false;
+    setMapReady(false);
     void loadGoogleMaps().then((maps) => {
       if (cancelled || !mapNode.current) return;
       setMapError("");
@@ -242,7 +244,11 @@ export function WhatsCrackin() {
         marker.addListener("click", () => setSelected(point));
         markersRef.current.push(marker);
       });
-    }).catch((error) => setMapError(error instanceof Error ? error.message : "Map unavailable."));
+      setMapReady(true);
+    }).catch((error) => {
+      setMapReady(false);
+      setMapError(error instanceof Error ? error.message : "Map unavailable.");
+    });
     return () => { cancelled=true; };
   }, [points, position, tab]);
 
@@ -361,12 +367,12 @@ export function WhatsCrackin() {
 
     {message ? <div className="form-message" role="status">{message}</div> : null}
 
-    {tab === "map" ? <div className={styles.mapShell}>
+    {tab === "map" ? <div className={styles.mapShell} data-map-status={mapError ? "error" : mapReady ? "ready" : position ? "loading" : "location-needed"}>
       {position ? <div ref={mapNode} className={styles.map}/> : <div className={styles.mapFallback}>Allow location access to center the map and find nearby RGLRS.</div>}
       {mapError ? <div className={styles.mapFallback}>{mapError}<br/>Near You still works once location access is enabled.</div> : null}
       {selected ? <div className={styles.selectedCard}><Avatar point={selected}/><div className={styles.personBody}><div className={styles.personName}>{selected.display_name || "RGLR nearby"}</div><div className={styles.personMeta}>{selected.presence_state === "live" ? "Live" : "Last check-in"} · {timeAgo(selected.captured_at)} · {distanceLabel(selected)}{selected.place_label ? ` · ${selected.place_label}` : ""}</div></div>{selected.user_id && !selected.is_friend ? <button className={styles.connect} type="button" onClick={()=>void connect(selected)} disabled={connected.has(selected.user_id)}>{connected.has(selected.user_id)?"Sent":"Connect"}</button>:null}</div> : null}
       <div className={styles.mapNote}>Public and anonymous distances are shown as ranges. A stale pin is never presented as live.</div>
-    </div> : <PeopleList points={visiblePoints} connected={connected} onConnect={connect}/>}
+    </div> : <div data-testid={tab === "near" ? "near-you-list" : "friends-list"}><PeopleList points={visiblePoints} connected={connected} onConnect={connect}/></div>}
   </div>;
 }
 
