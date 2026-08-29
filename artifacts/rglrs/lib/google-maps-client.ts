@@ -9,25 +9,44 @@ export async function loadGoogleMaps() {
   if (typeof window === "undefined") throw new Error("Google Maps requires a browser.");
   if (window.google?.maps) return window.google.maps;
   if (window.__rglrsGoogleMapsPromise) return window.__rglrsGoogleMapsPromise;
-  const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
   if (!key) throw new Error("Map view is not configured yet.");
-  window.__rglrsGoogleMapsPromise = new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[data-rglrs-google-maps="true"]');
-    if (existing) {
-      existing.addEventListener("load", () => window.google?.maps ? resolve(window.google.maps) : reject(new Error("Google Maps failed to initialize.")), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Google Maps failed to load.")), { once: true });
+  const promise = new Promise<any>((resolve, reject) => {
+    let script = document.querySelector<HTMLScriptElement>('script[data-rglrs-google-maps="true"]');
+    const cleanupFailedScript = () => {
+      if (script?.parentNode) script.parentNode.removeChild(script);
+    };
+    const handleLoad = () => {
+      if (window.google?.maps) resolve(window.google.maps);
+      else {
+        cleanupFailedScript();
+        reject(new Error("Google Maps failed to initialize."));
+      }
+    };
+    const handleError = () => {
+      cleanupFailedScript();
+      reject(new Error("Google Maps failed to load."));
+    };
+    if (script) {
+      if (window.google?.maps) return resolve(window.google.maps);
+      script.addEventListener("load", handleLoad, { once: true });
+      script.addEventListener("error", handleError, { once: true });
       return;
     }
-    const script = document.createElement("script");
+    script = document.createElement("script");
     script.dataset.rglrsGoogleMaps = "true";
     script.async = true;
     script.defer = true;
     script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly`;
-    script.onload = () => window.google?.maps ? resolve(window.google.maps) : reject(new Error("Google Maps failed to initialize."));
-    script.onerror = () => reject(new Error("Google Maps failed to load."));
+    script.addEventListener("load", handleLoad, { once: true });
+    script.addEventListener("error", handleError, { once: true });
     document.head.appendChild(script);
   });
-  return window.__rglrsGoogleMapsPromise;
+  window.__rglrsGoogleMapsPromise = promise;
+  void promise.catch(() => {
+    if (window.__rglrsGoogleMapsPromise === promise) window.__rglrsGoogleMapsPromise = undefined;
+  });
+  return promise;
 }
 
 export {};

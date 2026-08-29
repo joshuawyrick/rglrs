@@ -78,21 +78,21 @@ export function MobileBottom() {
   const path = usePathname();
   const { messages } = useUnread();
   const links = [
-    ["/", Home],
-    ["/whats-crackin", MapPin],
-    ["/search", Search],
-    ["/create", Plus],
-    ["/messages", MessageCircle],
-    ["/profile", UserRound]
+    ["/", "Home", Home],
+    ["/whats-crackin", "What’s Crackin", MapPin],
+    ["/search", "Search", Search],
+    ["/create", "Create", Plus],
+    ["/messages", "Messages", MessageCircle],
+    ["/profile", "Profile", UserRound]
   ] as const;
   return (
     <div className="mobile-bottom">
       <div className="mobile-bottom-inner" style={{gridTemplateColumns:"repeat(6,1fr)"}}>
-        {links.map(([href,Icon]) => (
+        {links.map(([href,label,Icon]) => (
           <Link
             key={href}
             href={href}
-            aria-label={href}
+            aria-label={label}
             className={href==="/create"?"mobile-create":`mobile-nav-link ${isActive(path,href)?"active":""}`}
             style={href==="/create"?{width:44,height:44}:{minHeight:44}}
           >

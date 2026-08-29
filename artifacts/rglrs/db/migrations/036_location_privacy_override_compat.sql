@@ -22,3 +22,7 @@ begin
   values(v_actor,v_subject,(v->>'can_view_profile')::boolean,(v->>'can_view_profile_photo')::boolean,(v->>'can_view_connections')::boolean,(v->>'can_find_username')::boolean,(v->>'can_find_email')::boolean,(v->>'can_send_friend_request')::boolean,(v->>'can_message')::boolean,(v->>'can_invite_to_events')::boolean,(v->>'can_download_media')::boolean,(v->>'can_reshare_internal')::boolean,(v->>'hide_posts')::boolean,(v->>'hide_event_media')::boolean,(v->>'can_view_location')::boolean);
  end loop; return true;
 end $$;
+
+insert into public.rglrs_migrations(version,filename)
+values(36,'036_location_privacy_override_compat.sql')
+on conflict(version) do update set filename=excluded.filename;

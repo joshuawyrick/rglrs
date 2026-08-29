@@ -39,17 +39,19 @@ with viewer as (
     and public.can_view_live_location(s.owner_id,v.id)
     and (l.captured_at>=now()-interval '5 minutes'
       or (s.checkin_ttl_minutes>0 and l.captured_at+make_interval(mins=>s.checkin_ttl_minutes)>now()))
-    and extensions.st_dwithin(l.position,v.point,p_radius_m)
 ), displayed as (
   select e.*,
     case when e.precision='precise' and not e.anonymous_identity then e.position
       else extensions.st_project(
         e.position,
-        (250 + mod(abs(hashtextextended(e.owner_id::text||date_trunc('hour',e.captured_at)::text,17)),551))::double precision,
-        radians(mod(abs(hashtextextended(e.owner_id::text||date_trunc('hour',e.captured_at)::text,31)),360)::double precision)
+        (250 + mod(abs(hashtextextended(e.session_id::text||date_trunc('hour',e.captured_at)::text,17)),551))::double precision,
+        radians(mod(abs(hashtextextended(e.session_id::text||date_trunc('hour',e.captured_at)::text,31)),360)::double precision)
       )
     end display_point
   from eligible e
+), bounded as (
+  select d.* from displayed d
+   where extensions.st_dwithin(d.display_point,d.viewer_point,p_radius_m)
 )
 select
   case when d.anonymous_identity then 'anon-'||substr(md5(d.session_id::text||date_trunc('hour',d.captured_at)::text),1,16) else d.owner_id::text end,
@@ -66,7 +68,7 @@ select
   d.friend,
   d.anonymous_identity,
   d.audience
-from displayed d
+from bounded d
 order by extensions.st_distance(d.display_point,d.viewer_point)
 limit 250
 $$;
@@ -95,4 +97,9 @@ begin
 end $$;
 
 revoke all on function public.prune_expired_locations_secure() from public,anon,authenticated;
+revoke all on function public.can_view_live_location(uuid,uuid) from public,anon,authenticated;
 grant execute on function public.prune_expired_locations_secure() to service_role;
+
+insert into public.rglrs_migrations(version,filename)
+values(37,'037_whats_crackin_retention_hardening.sql')
+on conflict(version) do update set filename=excluded.filename;

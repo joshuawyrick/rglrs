@@ -77,7 +77,8 @@ export function DateRangeCalendar({
         const isSelected = value === startDate || value === endDate;
         const isInRange = Boolean(startDate && endDate && value > startDate && value < endDate);
         const className = [styles.day, date.getMonth() !== month.getMonth() ? styles.muted : "", isSelected ? styles.selected : "", isInRange ? styles.inRange : "", sameDay(date, today) ? styles.today : ""].filter(Boolean).join(" ");
-        return <button type="button" key={value} className={className} aria-pressed={isSelected} onClick={() => choose(date)}>{date.getDate()}</button>;
+        const label = date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+        return <button type="button" key={value} className={className} aria-label={label} aria-pressed={isSelected} onClick={() => choose(date)}>{date.getDate()}</button>;
       })}
     </div>
     <div className={styles.rangeSummary}>{summary}</div>

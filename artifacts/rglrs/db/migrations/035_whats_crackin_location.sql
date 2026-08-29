@@ -14,6 +14,7 @@ create table public.location_sharing_sessions (
   audience text not null check (audience in ('friends','selected','event','everyone','anonymous')),
   precision text not null check (precision in ('precise','approximate')),
   event_id uuid references public.events(id) on delete cascade,
+  share_duration_minutes integer check (share_duration_minutes is null or share_duration_minutes in (15,60,480)),
   share_until timestamptz,
   checkin_ttl_minutes integer not null default 120 check (checkin_ttl_minutes in (0,30,120,480)),
   place_label text check (place_label is null or char_length(btrim(place_label)) between 1 and 120),
@@ -80,7 +81,10 @@ begin
     return public.is_friend(p_owner,p_viewer)
        and exists(select 1 from public.location_share_targets t where t.owner_id=p_owner and t.target_id=p_viewer);
   elsif v_session.audience='event' then
-    return public.can_view_event(v_session.event_id,p_viewer);
+    return exists(
+      select 1 from public.event_members m
+       where m.event_id=v_session.event_id and m.user_id=p_owner
+    ) and public.can_view_event(v_session.event_id,p_viewer);
   elsif v_session.audience in ('everyone','anonymous') then
     return true;
   end if;
@@ -105,9 +109,11 @@ declare
   v_label text:=nullif(btrim(coalesce(p_place_label,'')),'');
 begin
   if v_actor is null then raise exception 'authentication required'; end if;
+  p_target_ids:=coalesce((select array_agg(distinct x) from unnest(coalesce(p_target_ids,'{}'::uuid[])) x),'{}'::uuid[]);
   if p_audience not in ('friends','selected','event','everyone','anonymous')
      or p_precision not in ('precise','approximate')
      or p_checkin_ttl_minutes not in (0,30,120,480)
+     or cardinality(p_target_ids)>200
      or coalesce(char_length(v_label),0)>120
   then raise exception 'invalid location sharing settings'; end if;
   if p_audience='anonymous' then p_precision:='approximate'; end if;
@@ -138,12 +144,13 @@ begin
     end if;
   end loop;
 
-  insert into public.location_sharing_sessions(owner_id,session_id,audience,precision,event_id,share_until,checkin_ttl_minutes,place_label,public_discovery_ack_at,started_at,ended_at,updated_at)
-  values(v_actor,v_session,p_audience,p_precision,p_event_id,v_until,p_checkin_ttl_minutes,v_label,
+  insert into public.location_sharing_sessions(owner_id,session_id,audience,precision,event_id,share_duration_minutes,share_until,checkin_ttl_minutes,place_label,public_discovery_ack_at,started_at,ended_at,updated_at)
+  values(v_actor,v_session,p_audience,p_precision,p_event_id,p_duration_minutes,v_until,p_checkin_ttl_minutes,v_label,
     case when p_audience in ('everyone','anonymous') then now() end,now(),null,now())
   on conflict(owner_id) do update set
     session_id=excluded.session_id,audience=excluded.audience,precision=excluded.precision,event_id=excluded.event_id,
-    share_until=excluded.share_until,checkin_ttl_minutes=excluded.checkin_ttl_minutes,place_label=excluded.place_label,
+    share_duration_minutes=excluded.share_duration_minutes,share_until=excluded.share_until,
+    checkin_ttl_minutes=excluded.checkin_ttl_minutes,place_label=excluded.place_label,
     public_discovery_ack_at=excluded.public_discovery_ack_at,started_at=now(),ended_at=null,updated_at=now();
 
   delete from public.location_share_targets where owner_id=v_actor;
@@ -160,14 +167,16 @@ create or replace function public.update_my_location_secure(
   p_accuracy_m double precision,
   p_captured_at timestamptz default now()
 ) returns timestamptz language plpgsql security definer set search_path=public,private,pg_temp as $$
-declare v_actor uuid:=auth.uid();
+declare v_actor uuid:=auth.uid(); v_session public.location_sharing_sessions%rowtype;
 begin
   if v_actor is null then raise exception 'authentication required'; end if;
   if p_lat is null or p_lng is null or p_lat not between -90 and 90 or p_lng not between -180 and 180
      or p_accuracy_m is null or p_accuracy_m<0 or p_accuracy_m>5000
      or p_captured_at>now()+interval '2 minutes' or p_captured_at<now()-interval '10 minutes'
   then raise exception 'invalid location update'; end if;
-  if not exists(select 1 from public.location_sharing_sessions where owner_id=v_actor and ended_at is null and (share_until is null or share_until>now())) then
+  select * into v_session from public.location_sharing_sessions
+   where owner_id=v_actor for update;
+  if not found or v_session.ended_at is not null or (v_session.share_until is not null and v_session.share_until<=now()) then
     raise exception 'location sharing is not active';
   end if;
   insert into private.current_locations(owner_id,position,accuracy_m,captured_at,updated_at)
@@ -180,9 +189,11 @@ end $$;
 
 create or replace function public.stop_location_sharing_secure()
 returns boolean language plpgsql security definer set search_path=public,private,pg_temp as $$
-declare v_actor uuid:=auth.uid();
+declare v_actor uuid:=auth.uid(); v_owner uuid;
 begin
   if v_actor is null then raise exception 'authentication required'; end if;
+  select owner_id into v_owner from public.location_sharing_sessions
+   where owner_id=v_actor for update;
   update public.location_sharing_sessions set ended_at=now(),updated_at=now() where owner_id=v_actor;
   delete from private.current_locations where owner_id=v_actor;
   return true;
@@ -194,7 +205,9 @@ returns jsonb language sql stable security definer set search_path=public,privat
     select jsonb_build_object(
       'active',s.ended_at is null and (s.share_until is null or s.share_until>now()),
       'session_id',s.session_id,'audience',s.audience,'precision',s.precision,'event_id',s.event_id,
-      'share_until',s.share_until,'checkin_ttl_minutes',s.checkin_ttl_minutes,'place_label',s.place_label,
+      'share_duration_minutes',s.share_duration_minutes,'share_until',s.share_until,
+      'checkin_ttl_minutes',s.checkin_ttl_minutes,'place_label',s.place_label,
+      'public_discovery_acknowledged',s.public_discovery_ack_at is not null,
       'started_at',s.started_at,'last_update',l.captured_at,
       'target_ids',coalesce((select jsonb_agg(t.target_id order by t.target_id) from public.location_share_targets t where t.owner_id=auth.uid()),'[]'::jsonb)
     )
@@ -242,17 +255,19 @@ with viewer as (
     and public.can_view_live_location(s.owner_id,v.id)
     and (l.captured_at>=now()-interval '5 minutes'
       or (s.checkin_ttl_minutes>0 and l.captured_at+make_interval(mins=>s.checkin_ttl_minutes)>now()))
-    and extensions.st_dwithin(l.position,v.point,p_radius_m)
 ), displayed as (
   select e.*,
     case when e.precision='precise' and not e.anonymous_identity then e.position
       else extensions.st_project(
         e.position,
-        (250 + mod(abs(hashtextextended(e.owner_id::text||date_trunc('hour',e.captured_at)::text,17)),551))::double precision,
-        radians(mod(abs(hashtextextended(e.owner_id::text||date_trunc('hour',e.captured_at)::text,31)),360)::double precision)
+        (250 + mod(abs(hashtextextended(e.session_id::text||date_trunc('hour',e.captured_at)::text,17)),551))::double precision,
+        radians(mod(abs(hashtextextended(e.session_id::text||date_trunc('hour',e.captured_at)::text,31)),360)::double precision)
       )
     end display_point
   from eligible e
+), bounded as (
+  select d.* from displayed d
+   where extensions.st_dwithin(d.display_point,d.viewer_point,p_radius_m)
 )
 select
   case when d.anonymous_identity then 'anon-'||substr(md5(d.session_id::text||date_trunc('hour',d.captured_at)::text),1,16) else d.owner_id::text end,
@@ -269,7 +284,7 @@ select
   d.friend,
   d.anonymous_identity,
   d.audience
-from displayed d
+from bounded d
 order by extensions.st_distance(d.display_point,d.viewer_point)
 limit 250
 $$;
@@ -308,9 +323,12 @@ revoke all on function public.stop_location_sharing_secure() from public,anon,au
 revoke all on function public.get_my_location_sharing_secure() from public,anon,authenticated;
 revoke all on function public.get_whats_crackin_nearby(double precision,double precision,integer) from public,anon,authenticated;
 
-grant execute on function public.can_view_live_location(uuid,uuid) to authenticated;
 grant execute on function public.start_location_sharing_secure(text,text,uuid,uuid[],integer,integer,text,boolean) to authenticated;
 grant execute on function public.update_my_location_secure(double precision,double precision,double precision,timestamptz) to authenticated;
 grant execute on function public.stop_location_sharing_secure() to authenticated;
 grant execute on function public.get_my_location_sharing_secure() to authenticated;
 grant execute on function public.get_whats_crackin_nearby(double precision,double precision,integer) to authenticated;
+
+insert into public.rglrs_migrations(version,filename)
+values(35,'035_whats_crackin_location.sql')
+on conflict(version) do update set filename=excluded.filename;

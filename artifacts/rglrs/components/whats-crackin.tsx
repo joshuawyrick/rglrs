@@ -31,21 +31,33 @@ type ShareState = {
   audience?: Audience;
   precision?: Precision;
   event_id?: string | null;
+  share_duration_minutes?: number | null;
   share_until?: string | null;
   checkin_ttl_minutes?: number;
   place_label?: string | null;
   last_update?: string | null;
   target_ids?: string[];
+  public_discovery_acknowledged?: boolean;
+  public_discovery_eligible?: boolean;
 };
 type Friend = { id: string; name: string };
 type EventChoice = { id: string; title: string; ends_at: string | null };
 type Coordinates = { lat: number; lng: number; accuracy: number; capturedAt: string };
 
+function capturedAt(position: GeolocationPosition) {
+  const timestamp = Number(position.timestamp);
+  const now = Date.now();
+  const safeTimestamp = Number.isFinite(timestamp) && timestamp >= now - 10 * 60_000 && timestamp <= now + 2 * 60_000
+    ? timestamp
+    : now;
+  return new Date(safeTimestamp).toISOString();
+}
+
 function currentPosition(): Promise<Coordinates> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error("Location is not available on this device."));
     navigator.geolocation.getCurrentPosition(
-      (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy, capturedAt: new Date(position.timestamp).toISOString() }),
+      (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy, capturedAt: capturedAt(position) }),
       () => reject(new Error("Allow location access to use What’s Crackin.")),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 20000 },
     );
@@ -89,6 +101,7 @@ export function WhatsCrackin() {
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [eventId, setEventId] = useState("");
   const [publicAck, setPublicAck] = useState(false);
+  const [publicEligible, setPublicEligible] = useState(false);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [events, setEvents] = useState<EventChoice[]>([]);
   const [position, setPosition] = useState<Coordinates | null>(null);
@@ -103,6 +116,9 @@ export function WhatsCrackin() {
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const lastPushRef = useRef(0);
+  const radiusMilesRef = useRef(radiusMiles);
+
+  useEffect(() => { radiusMilesRef.current = radiusMiles; }, [radiusMiles]);
 
   const loadShare = useCallback(async () => {
     if (!supabase) return;
@@ -110,12 +126,15 @@ export function WhatsCrackin() {
     if (error) return setMessage(error.message || "Could not load location sharing.");
     const next = (data || { active: false, target_ids: [] }) as ShareState;
     setShare(next);
+    setPublicEligible(Boolean(next.public_discovery_eligible));
     if (next.audience) setAudience(next.audience);
     if (next.precision) setPrecision(next.precision);
     if (next.event_id) setEventId(next.event_id);
     if (next.target_ids) setSelectedFriends(next.target_ids);
+    if (next.share_duration_minutes !== undefined) setDuration(next.share_duration_minutes === null ? "until" : String(next.share_duration_minutes));
     if (next.checkin_ttl_minutes !== undefined) setCheckin(String(next.checkin_ttl_minutes));
     if (next.place_label !== undefined) setPlaceLabel(next.place_label || "");
+    setPublicAck(Boolean(next.public_discovery_acknowledged));
   }, [supabase]);
 
   const loadChoices = useCallback(async () => {
@@ -139,23 +158,28 @@ export function WhatsCrackin() {
   const loadNearby = useCallback(async (where: Coordinates) => {
     if (!supabase) return;
     const { data, error } = await supabase.rpc("get_whats_crackin_nearby", {
-      p_lat:where.lat, p_lng:where.lng, p_radius_m:Math.round(radiusMiles * 1609.344),
+      p_lat:where.lat, p_lng:where.lng, p_radius_m:Math.round(radiusMilesRef.current * 1609.344),
     });
     if (error) return setMessage(error.message || "Could not load nearby RGLRS.");
     setPoints((data || []) as NearbyPoint[]);
-  }, [radiusMiles, supabase]);
+  }, [supabase]);
 
   const pushPosition = useCallback(async (where: Coordinates) => {
-    if (!supabase) return;
+    if (!supabase) return false;
     const now = Date.now();
-    if (now - lastPushRef.current < 15000) return;
+    if (now - lastPushRef.current < 15000) return true;
     lastPushRef.current = now;
     setPosition(where);
     const { error } = await supabase.rpc("update_my_location_secure", {
       p_lat:where.lat,p_lng:where.lng,p_accuracy_m:Math.min(5000,Math.max(0,where.accuracy)),p_captured_at:where.capturedAt,
     });
-    if (error) setMessage(error.message || "Could not update your location.");
-    else void loadNearby(where);
+    if (error) {
+      lastPushRef.current = 0;
+      setMessage(error.message || "Could not update your location.");
+      return false;
+    }
+    void loadNearby(where);
+    return true;
   }, [loadNearby, supabase]);
 
   useEffect(() => { void loadShare(); void loadChoices(); }, [loadShare, loadChoices]);
@@ -165,13 +189,31 @@ export function WhatsCrackin() {
 
   useEffect(() => {
     if (!share.active || !navigator.geolocation) return;
-    const watch = navigator.geolocation.watchPosition(
-      (geo) => void pushPosition({ lat:geo.coords.latitude,lng:geo.coords.longitude,accuracy:geo.coords.accuracy,capturedAt:new Date(geo.timestamp).toISOString() }),
-      () => setMessage("Live updates paused. Your last check-in will remain visible only for the time you chose."),
-      { enableHighAccuracy:true, maximumAge:15000, timeout:20000 },
-    );
-    return () => navigator.geolocation.clearWatch(watch);
+    let watch: number | null = null;
+    const stopWatch = () => {
+      if (watch !== null) navigator.geolocation.clearWatch(watch);
+      watch = null;
+    };
+    const syncWatch = () => {
+      if (document.visibilityState !== "visible") return stopWatch();
+      if (watch !== null) return;
+      watch = navigator.geolocation.watchPosition(
+        (geo) => void pushPosition({ lat:geo.coords.latitude,lng:geo.coords.longitude,accuracy:geo.coords.accuracy,capturedAt:capturedAt(geo) }),
+        () => setMessage("Live updates paused. Your last check-in will remain visible only for the time you chose."),
+        { enableHighAccuracy:true, maximumAge:15000, timeout:20000 },
+      );
+    };
+    syncWatch();
+    document.addEventListener("visibilitychange", syncWatch);
+    return () => {
+      document.removeEventListener("visibilitychange", syncWatch);
+      stopWatch();
+    };
   }, [pushPosition, share.active]);
+
+  useEffect(() => {
+    if (position) void loadNearby(position);
+  }, [loadNearby, position, radiusMiles]);
 
   useEffect(() => {
     if (!position) return;
@@ -189,7 +231,7 @@ export function WhatsCrackin() {
       else mapRef.current.setCenter({lat:position.lat,lng:position.lng});
       markersRef.current.forEach((marker) => marker.setMap(null));
       markersRef.current = [];
-      const me = new maps.Marker({ map:mapRef.current, position:{lat:position.lat,lng:position.lng}, title:"You", zIndex:999, icon:{ path:maps.SymbolPath.CIRCLE,scale:7,fillColor:"#44d9cb",fillOpacity:1,strokeColor:"#ffffff",strokeWeight:2 } });
+       const me = new maps.Marker({ map:mapRef.current, position:{lat:position.lat,lng:position.lng}, title:"You", zIndex:999, icon:{ path:maps.SymbolPath.CIRCLE,scale:7,fillColor:"#44d9cb",fillOpacity:1,strokeColor:"#ffffff",strokeWeight:2 } });
       markersRef.current.push(me);
       points.forEach((point) => {
         const avatarUrl = point.avatar_upload_id ? `/private-media/avatar/${point.avatar_upload_id}` : markerSvg(point.display_name || "R", point.is_anonymous);
@@ -208,6 +250,7 @@ export function WhatsCrackin() {
     if (!supabase) return setMessage("Location sharing is unavailable.");
     if (audience === "selected" && !selectedFriends.length) return setMessage("Choose at least one friend.");
     if (audience === "event" && !eventId) return setMessage("Choose an event.");
+    if ((audience === "everyone" || audience === "anonymous") && !publicEligible) return setMessage("Public and anonymous discovery is unavailable until age and family-safety eligibility is verified.");
     if ((audience === "everyone" || audience === "anonymous") && !publicAck) return setMessage("Confirm the public-discovery notice first.");
     setBusy(true); setMessage("");
     try {
@@ -220,7 +263,7 @@ export function WhatsCrackin() {
       });
       if (error) throw error;
       lastPushRef.current = 0;
-      await pushPosition(where);
+      if (!await pushPosition(where)) throw new Error("Sharing started, but your current location could not be saved. Try again.");
       await loadShare();
       setMessage("You’re on What’s Crackin. RGLRS will label stale positions as last check-ins.");
     } catch (error) {
@@ -272,7 +315,7 @@ export function WhatsCrackin() {
       <div className={styles.shareGrid}>
         <label className={styles.label}>Who can see me
           <select className={styles.select} value={audience} onChange={(e) => { const next=e.target.value as Audience; setAudience(next); if(next==="anonymous")setPrecision("approximate"); }}>
-            <option value="friends">Friends</option><option value="selected">Selected friends</option><option value="event">An event</option><option value="everyone">Everyone on RGLRS</option><option value="anonymous">Anonymous nearby</option>
+             <option value="friends">Friends</option><option value="selected">Selected friends</option><option value="event">An event</option>{publicEligible ? <><option value="everyone">Everyone on RGLRS</option><option value="anonymous">Anonymous nearby</option></> : null}
           </select>
         </label>
         <label className={styles.label}>Location precision
@@ -293,7 +336,8 @@ export function WhatsCrackin() {
         {audience === "event" ? <label className={`${styles.label} ${styles.full}`}>Event
           <select className={styles.select} value={eventId} onChange={(e)=>setEventId(e.target.value)}><option value="">Choose an event…</option>{events.map((event)=><option value={event.id} key={event.id}>{event.title}</option>)}</select>
         </label> : null}
-        {(audience === "everyone" || audience === "anonymous") ? <label className={`${styles.check} ${styles.full}`}><input type="checkbox" checked={publicAck} onChange={(e)=>setPublicAck(e.target.checked)}/><span>I understand this can make my location visible to signed-in RGLRS I don’t know. Anonymous mode hides my identity and always uses an approximate map point.</span></label> : null}
+         {(audience === "everyone" || audience === "anonymous") ? <label className={`${styles.check} ${styles.full}`}><input type="checkbox" checked={publicAck} onChange={(e)=>setPublicAck(e.target.checked)}/><span>I understand this can make my location visible to signed-in RGLRS I don’t know. Anonymous mode hides my identity and always uses an approximate map point.</span></label> : null}
+         {!publicEligible ? <p className={`${styles.privacyHint} ${styles.full}`}><Shield size={12}/> Everyone-on-RGLRS and Anonymous nearby stay off until a server-managed age and family-safety policy verifies this account.</p> : null}
         <p className={`${styles.privacyHint} ${styles.full}`}><Shield size={12}/> Blocks and person-specific location denials always win. Exact coordinates stay behind server authorization; approximate/anonymous viewers receive a privacy-shifted point.</p>
       </div>
       <div className={styles.actions} style={{marginTop:12}}>
@@ -322,7 +366,7 @@ export function WhatsCrackin() {
       {mapError ? <div className={styles.mapFallback}>{mapError}<br/>Near You still works once location access is enabled.</div> : null}
       {selected ? <div className={styles.selectedCard}><Avatar point={selected}/><div className={styles.personBody}><div className={styles.personName}>{selected.display_name || "RGLR nearby"}</div><div className={styles.personMeta}>{selected.presence_state === "live" ? "Live" : "Last check-in"} · {timeAgo(selected.captured_at)} · {distanceLabel(selected)}{selected.place_label ? ` · ${selected.place_label}` : ""}</div></div>{selected.user_id && !selected.is_friend ? <button className={styles.connect} type="button" onClick={()=>void connect(selected)} disabled={connected.has(selected.user_id)}>{connected.has(selected.user_id)?"Sent":"Connect"}</button>:null}</div> : null}
       <div className={styles.mapNote}>Public and anonymous distances are shown as ranges. A stale pin is never presented as live.</div>
-    </div> : <PeopleList points={visiblePoints} connected={connected} onConnect={connect}/>} 
+    </div> : <PeopleList points={visiblePoints} connected={connected} onConnect={connect}/>}
   </div>;
 }
 
