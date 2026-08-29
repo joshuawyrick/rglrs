@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 const releasePort = process.env.RELEASE_CHECK_PORT || "34568";
 const releaseBaseUrl = `http://127.0.0.1:${releasePort}`;
 const releaseDistDir = `.next-release-${process.pid}`;
+const releaseSmokeMapsKey = "rglrs-localhost-smoke-key";
 const nextBin = createRequire(import.meta.url).resolve("next/dist/bin/next");
 const generatedConfigFiles = ["next-env.d.ts", "tsconfig.json"];
 const generatedConfigSnapshots = new Map(
@@ -17,6 +18,8 @@ const releaseEnvironment = {
   NODE_ENV: "production",
   PORT: releasePort,
   RGLRS_DIST_DIR: releaseDistDir,
+  NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: releaseSmokeMapsKey,
+  RELEASE_MAP_SMOKE_STUB: "1",
 };
 
 function run(command, args, environment = process.env) {
@@ -98,7 +101,6 @@ try {
     {
       ...releaseEnvironment,
       SMOKE_BASE_URL: releaseBaseUrl,
-      RELEASE_MAP_SMOKE_STUB: "1",
     },
   );
   console.log("RGLRS release checks passed.");

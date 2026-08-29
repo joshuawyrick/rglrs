@@ -11,7 +11,7 @@ const smokeReferrer = process.env.RELEASE_SMOKE_REFERRER || process.env.NEXT_PUB
 const stubMaps = process.env.RELEASE_MAP_SMOKE_STUB === "1";
 
 if (!baseUrl) throw new Error("Set SMOKE_BASE_URL before running the What's Crackin browser smoke test.");
-if (!browserKey) throw new Error("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is required for the What's Crackin browser smoke test.");
+if (!browserKey) throw new Error(`${stubMaps ? "A deterministic test Maps key" : "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY"} is required for the What's Crackin browser smoke test.`);
 if (!stubMaps && !smokeReferrer) throw new Error("Set RELEASE_SMOKE_REFERRER or NEXT_PUBLIC_APP_URL for the live Maps referrer smoke check.");
 
 const expectedReferrer = smokeReferrer ? `${new URL(smokeReferrer).origin}/` : null;
@@ -74,6 +74,38 @@ try {
     permissions: ["geolocation"],
     viewport: { width: 390, height: 844 },
   });
+  await context.addInitScript(() => {
+    const geo = navigator.geolocation;
+    if (!geo) return;
+    const state = { nextId: 41, started: [], cleared: [] };
+    Object.defineProperty(window, "__rglrsGeoTest", { value: state, configurable: true });
+    Object.defineProperty(geo, "watchPosition", {
+      configurable: true,
+      value(success) {
+        const id = state.nextId++;
+        state.started.push(id);
+        queueMicrotask(() => success({
+          coords: {
+            latitude: 36.1699,
+            longitude: -115.1398,
+            accuracy: 12,
+            altitude: null,
+            altitudeAccuracy: null,
+            heading: null,
+            speed: null,
+          },
+          timestamp: Date.now(),
+        }));
+        return id;
+      },
+    });
+    Object.defineProperty(geo, "clearWatch", {
+      configurable: true,
+      value(id) {
+        state.cleared.push(id);
+      },
+    });
+  });
   const page = await context.newPage();
   const mapRequests = [];
   const mapReferrers = [];
@@ -81,6 +113,7 @@ try {
   const bundleBodies = [];
   const googleConsoleErrors = [];
   let mapAttempts = 0;
+  let continuedMapRequests = 0;
   let mapsUnavailable = false;
 
   page.on("request", (request) => requestUrls.push(request.url()));
@@ -99,8 +132,6 @@ try {
     const request = route.request();
     mapAttempts += 1;
     mapRequests.push(request);
-    const headers = { ...request.headers(), referer: expectedReferrer };
-    mapReferrers.push(headers.referer);
     if (mapsUnavailable || mapAttempts === 1) {
       await route.abort("failed");
       return;
@@ -122,7 +153,25 @@ try {
                 surface.dataset.testid = "deterministic-map-surface";
                 surface.setAttribute("aria-label", "Deterministic test map");
                 surface.style.cssText = "position:absolute;inset:0;background:linear-gradient(135deg,#142126,#20343a);";
+                let dragStart = null;
+                surface.addEventListener("pointerdown", (event) => {
+                  dragStart = { x: event.clientX, y: event.clientY };
+                  surface.setPointerCapture?.(event.pointerId);
+                });
+                surface.addEventListener("pointerup", (event) => {
+                  if (!dragStart) return;
+                  this.panBy(event.clientX - dragStart.x, event.clientY - dragStart.y);
+                  dragStart = null;
+                });
                 node.appendChild(surface);
+                const zoomIn = document.createElement("button");
+                zoomIn.type = "button";
+                zoomIn.dataset.testid = "deterministic-map-zoom-in";
+                zoomIn.setAttribute("aria-label", "Zoom in");
+                zoomIn.textContent = "+";
+                zoomIn.style.cssText = "position:absolute;right:8px;top:8px;z-index:1;width:32px;height:32px;";
+                zoomIn.addEventListener("click", () => this.setZoom(this.zoom + 1));
+                node.appendChild(zoomIn);
                 window.__rglrsTestMap = this;
               }
               setCenter(center) { this.center = center; }
@@ -152,6 +201,9 @@ try {
       });
       return;
     }
+    const headers = { ...request.headers(), referer: expectedReferrer };
+    mapReferrers.push(headers.referer);
+    continuedMapRequests += 1;
     await route.continue({ headers });
   });
 
@@ -176,20 +228,31 @@ try {
     recordFailure(`Maps request did not use the approved referrer origin (${expectedReferrer}).`);
   }
   if (stubMaps) {
+    if (continuedMapRequests !== 0) recordFailure("Stub mode allowed a Google Maps request to continue to the network.");
+    if (new URL(mapRequests[1].url()).searchParams.get("key") !== browserKey) {
+      recordFailure("Deterministic Maps request did not use the release gate's test-only key.");
+    }
     await page.locator('[data-testid="deterministic-map-surface"]').waitFor();
-    const interaction = await page.evaluate(() => {
+    const before = await page.evaluate(() => {
       const map = window.__rglrsTestMap;
-      if (!map) return null;
-      const before = map.getZoom();
-      map.setZoom(before + 1);
-      map.panBy(48, -24);
-      return {
-        before,
-        after: map.getZoom(),
-        pan: map.pan,
-      };
+      return map ? { zoom: map.getZoom(), pan: map.pan } : null;
     });
-    if (!interaction || interaction.after !== interaction.before + 1 || interaction.pan?.x !== 48 || interaction.pan?.y !== -24) {
+    await page.locator('[data-testid="deterministic-map-zoom-in"]').click();
+    const surface = page.locator('[data-testid="deterministic-map-surface"]');
+    const box = await surface.boundingBox();
+    if (!box) {
+      recordFailure("Deterministic Maps surface was not visible for pan interaction.");
+    } else {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width / 2 + 48, box.y + box.height / 2 - 24, { steps: 4 });
+      await page.mouse.up();
+    }
+    const after = await page.evaluate(() => {
+      const map = window.__rglrsTestMap;
+      return map ? { zoom: map.getZoom(), pan: map.pan } : null;
+    });
+    if (!before || !after || after.zoom !== before.zoom + 1 || after.pan?.x !== 48 || after.pan?.y !== -24) {
       recordFailure("Deterministic Maps stub did not support zoom and pan interactions.");
     }
   }
@@ -199,8 +262,14 @@ try {
 
   await page.getByRole("button", { name: "Share my location" }).click();
   await page.getByText("Sharing location", { exact: true }).waitFor({ timeout: 30_000 });
+  await page.waitForFunction(() => window.__rglrsGeoTest?.started.length === 1);
+  const startedWatch = await page.evaluate(() => window.__rglrsGeoTest?.started[0]);
+  if (typeof startedWatch !== "number") recordFailure("Foreground sharing did not start a geolocation watch.");
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await page.getByText("Location sharing stopped. Your pin was removed immediately.", { exact: true }).waitFor({ timeout: 30_000 });
+  await page.waitForFunction((watchId) => window.__rglrsGeoTest?.cleared.includes(watchId), startedWatch);
+  const clearedWatches = await page.evaluate(() => window.__rglrsGeoTest?.cleared || []);
+  if (!clearedWatches.includes(startedWatch)) recordFailure("Stop Sharing did not clear the active geolocation watch.");
 
   mapsUnavailable = true;
   await page.evaluate(() => {
