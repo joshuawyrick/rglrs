@@ -27,7 +27,13 @@ export async function POST(request: Request) {
   }
   if (!claimed) return NextResponse.json({ error: "Media cleanup is already running" }, { status: 409 });
   try {
-    return NextResponse.json(await cleanupExpiredUploads(admin, r2.client, r2.bucket));
+    const mediaResult = await cleanupExpiredUploads(admin, r2.client, r2.bucket);
+    const { data: locationRowsPruned, error: locationError } = await admin.rpc("prune_expired_locations_secure");
+    if (locationError) {
+      const errorId = logServerError("whats_crackin.location_cleanup_failed", locationError);
+      return NextResponse.json({ error: "Location cleanup failed", errorId, ...mediaResult }, { status: 500 });
+    }
+    return NextResponse.json({ ...mediaResult, locationRowsPruned: Number(locationRowsPruned || 0) });
   } catch (error) {
     const errorId = logServerError("private_media.cleanup_failed", error);
     return NextResponse.json({ error: "Media cleanup failed", errorId }, { status: 500 });
